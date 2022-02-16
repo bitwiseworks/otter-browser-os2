@@ -538,6 +538,10 @@ elseif (UNIX)
 		3rdparty/libmimeapps/Index.cpp
 		3rdparty/libmimeapps/Tools.cpp
 	)
+elseif (OS2)
+	enable_language(RC)
+	set_source_files_properties(otter-browser-os2.rc PROPERTIES LANGUAGE RC)
+	set(otter_src ${otter_src} otter-browser-os2.rc)
 endif ()
 
 add_executable(otter-browser WIN32 MACOSX_BUNDLE
