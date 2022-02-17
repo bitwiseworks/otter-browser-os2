@@ -37,11 +37,32 @@ CookieJar::CookieJar(const QString &path, QObject *parent) : QNetworkCookieJar(p
 	m_keepMode(KeepUntilExpiresMode),
 	m_saveTimer(0)
 {
-	if (path.isEmpty())
+	if (!path.isEmpty())
+	{
+		loadCookies(path);
+	}
+
+	handleOptionChanged(SettingsManager::Network_CookiesPolicyOption, SettingsManager::getOption(SettingsManager::Network_CookiesPolicyOption));
+
+	connect(SettingsManager::getInstance(), &SettingsManager::optionChanged, this, &CookieJar::handleOptionChanged);
+}
+
+void CookieJar::timerEvent(QTimerEvent *event)
+{
+	if (event->timerId() != m_saveTimer)
 	{
 		return;
 	}
 
+	killTimer(m_saveTimer);
+
+	m_saveTimer = 0;
+
+	save();
+}
+
+void CookieJar::loadCookies(const QString &path)
+{
 	QFile file(path);
 
 	if (!file.open(QIODevice::ReadOnly))
@@ -76,24 +97,7 @@ CookieJar::CookieJar(const QString &path, QObject *parent) : QNetworkCookieJar(p
 		}
 	}
 
-	handleOptionChanged(SettingsManager::Network_CookiesPolicyOption, SettingsManager::getOption(SettingsManager::Network_CookiesPolicyOption));
 	setAllCookies(allCookies);
-
-	connect(SettingsManager::getInstance(), &SettingsManager::optionChanged, this, &CookieJar::handleOptionChanged);
-}
-
-void CookieJar::timerEvent(QTimerEvent *event)
-{
-	if (event->timerId() != m_saveTimer)
-	{
-		return;
-	}
-
-	killTimer(m_saveTimer);
-
-	m_saveTimer = 0;
-
-	save();
 }
 
 void CookieJar::clearCookies(int period)
@@ -220,23 +224,23 @@ QList<QNetworkCookie> CookieJar::getCookiesForUrl(const QUrl &url) const
 
 QVector<QNetworkCookie> CookieJar::getCookies(const QString &domain) const
 {
-	if (!domain.isEmpty())
+	if (domain.isEmpty())
 	{
-		const QList<QNetworkCookie> cookies(allCookies());
-		QVector<QNetworkCookie> domainCookies;
-
-		for (int i = 0; i < cookies.count(); ++i)
-		{
-			if (cookies.at(i).domain() == domain || (cookies.at(i).domain().startsWith(QLatin1Char('.')) && domain.endsWith(cookies.at(i).domain())))
-			{
-				domainCookies.append(cookies.at(i));
-			}
-		}
-
-		return domainCookies;
+		return allCookies().toVector();
 	}
 
-	return allCookies().toVector();
+	const QList<QNetworkCookie> cookies(allCookies());
+	QVector<QNetworkCookie> domainCookies;
+
+	for (int i = 0; i < cookies.count(); ++i)
+	{
+		if (cookies.at(i).domain() == domain || (cookies.at(i).domain().startsWith(QLatin1Char('.')) && domain.endsWith(cookies.at(i).domain())))
+		{
+			domainCookies.append(cookies.at(i));
+		}
+	}
+
+	return domainCookies;
 }
 
 bool CookieJar::insertCookie(const QNetworkCookie &cookie)
@@ -315,6 +319,8 @@ bool CookieJar::forceUpdateCookie(const QNetworkCookie &cookie)
 	if (result)
 	{
 		scheduleSave();
+
+		emit cookieModified(cookie);
 	}
 
 	return result;

@@ -1,7 +1,7 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
 * Copyright (C) 2014 Jan Bajer aka bajasoft <jbajer@gmail.com>
-* Copyright (C) 2014 - 2020 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2014 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -25,6 +25,9 @@
 #include <QtCore/QCoreApplication>
 #include <QtCore/QDate>
 #include <QtCore/QFile>
+#if QT_VERSION >= 0x050C00
+#include <QtCore/QRegularExpression>
+#endif
 #include <QtNetwork/QHostInfo>
 #include <QtNetwork/QNetworkInterface>
 
@@ -40,16 +43,17 @@ PacUtils::PacUtils(QObject *parent) : QObject(parent)
 
 void PacUtils::alert(const QString &message) const
 {
-	Console::addMessage(message, Console::NetworkCategory, Console::WarningLevel);
+	Console::addMessage(message, Console::NetworkCategory, Console::DebugLevel);
 }
 
 QString PacUtils::dnsResolve(const QString &host) const
 {
 	const QHostInfo hostInformation(QHostInfo::fromName(host));
+	const QList<QHostAddress> addresses(hostInformation.addresses());
 
-	if (hostInformation.error() == QHostInfo::NoError && !hostInformation.addresses().isEmpty())
+	if (hostInformation.error() == QHostInfo::NoError && !addresses.isEmpty())
 	{
-		return hostInformation.addresses().value(0).toString();
+		return addresses.first().toString();
 	}
 
 	return {};
@@ -61,9 +65,11 @@ QString PacUtils::myIpAddress() const
 
 	for (int i = 0; i < addresses.count(); ++i)
 	{
-		if (!addresses.at(i).isNull() && addresses.at(i) != QHostAddress::LocalHost && addresses.at(i) != QHostAddress::LocalHostIPv6 && addresses.at(i) != QHostAddress::Null && addresses.at(i) != QHostAddress::Broadcast && addresses.at(i) != QHostAddress::Any && addresses.at(i) != QHostAddress::AnyIPv6)
+		const QHostAddress address(addresses.at(i));
+
+		if (!address.isNull() && address != QHostAddress::LocalHost && address != QHostAddress::LocalHostIPv6 && address != QHostAddress::Null && address != QHostAddress::Broadcast && address != QHostAddress::Any && address != QHostAddress::AnyIPv6)
 		{
-			return addresses.at(i).toString();
+			return address.toString();
 		}
 	}
 
@@ -121,7 +127,11 @@ bool PacUtils::dnsDomainIs(const QString &host, const QString &domain) const
 
 bool PacUtils::shExpMatch(const QString &string, const QString &expression) const
 {
+#if QT_VERSION >= 0x050C00
+	return QRegularExpression(QRegularExpression::wildcardToRegularExpression(expression)).match(string).hasMatch();
+#else
 	return QRegExp(expression, Qt::CaseInsensitive, QRegExp::Wildcard).exactMatch(string);
+#endif
 }
 
 bool PacUtils::weekdayRange(QString fromDay, QString toDay, const QString &gmt) const
@@ -224,17 +234,17 @@ bool PacUtils::dateRange(const QVariant &arg1, const QVariant &arg2, const QVari
 
 	if (arguments.count() == 4 && arguments.at(1) > 1500 && arguments.at(3) > 1500)
 	{
-		return isDateInRange(QDate(arguments.at(1), arguments.at(0), currentDay.day()), QDate(arguments.at(3), arguments.at(2), currentDay.day()), currentDay);
+		return isDateInRange({arguments.at(1), arguments.at(0), currentDay.day()}, {arguments.at(3), arguments.at(2), currentDay.day()}, currentDay);
 	}
 
 	if (arguments.count() == 4)
 	{
-		return isDateInRange(QDate(currentDay.year(), arguments.at(1), arguments.at(0)), QDate(currentDay.year(), arguments.at(3), arguments.at(2)), currentDay);
+		return isDateInRange({currentDay.year(), arguments.at(1), arguments.at(0)}, {currentDay.year(), arguments.at(3), arguments.at(2)}, currentDay);
 	}
 
 	if (arguments.count() == 6)
 	{
-		return isDateInRange(QDate(arguments.at(2), arguments.at(1), arguments.at(0)), QDate(arguments.at(5), arguments.at(4), arguments.at(3)), currentDay);
+		return isDateInRange({arguments.at(2), arguments.at(1), arguments.at(0)}, {arguments.at(5), arguments.at(4), arguments.at(3)}, currentDay);
 	}
 
 	return false;
@@ -274,12 +284,12 @@ bool PacUtils::timeRange(const QVariant &arg1, const QVariant &arg2, const QVari
 
 	if (arguments.count() == 4)
 	{
-		return isTimeInRange(QTime(arguments.at(0), arguments.at(1)), QTime(arguments.at(2), arguments.at(3)), currentTime);
+		return isTimeInRange({arguments.at(0), arguments.at(1)}, {arguments.at(2), arguments.at(3)}, currentTime);
 	}
 
 	if (arguments.count() == 6)
 	{
-		return isTimeInRange(QTime(arguments.at(0), arguments.at(1), arguments.at(2)), QTime(arguments.at(3), arguments.at(4), arguments.at(5)), currentTime);
+		return isTimeInRange({arguments.at(0), arguments.at(1), arguments.at(2)}, {arguments.at(3), arguments.at(4), arguments.at(5)}, currentTime);
 	}
 
 	return false;

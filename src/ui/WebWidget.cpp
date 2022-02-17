@@ -38,6 +38,7 @@
 #include "../core/ThemesManager.h"
 #include "../core/TransfersManager.h"
 #include "../core/Utils.h"
+#include "../core/WebBackend.h"
 
 #include <QtCore/QDir>
 #include <QtCore/QJsonArray>
@@ -543,7 +544,7 @@ void WebWidget::showContextMenu(const QPoint &position)
 		return;
 	}
 
-	ActionExecutor::Object executor;
+	ActionExecutor::Object executor(this, this);
 
 	if (m_parent)
 	{
@@ -555,10 +556,6 @@ void WebWidget::showContextMenu(const QPoint &position)
 		{
 			executor = ActionExecutor::Object(m_parent, m_parent);
 		}
-	}
-	else
-	{
-		executor = ActionExecutor::Object(this, this);
 	}
 
 	Menu menu(this);
@@ -1063,6 +1060,7 @@ ActionsManager::ActionDefinition::State WebWidget::getActionState(int identifier
 		case ActionsManager::OpenLinkInNewPrivateWindowAction:
 		case ActionsManager::OpenLinkInNewPrivateWindowBackgroundAction:
 		case ActionsManager::CopyLinkToClipboardAction:
+		case ActionsManager::ShowLinkAsQrCodeAction:
 		case ActionsManager::SaveLinkToDiskAction:
 		case ActionsManager::SaveLinkToDownloadsAction:
 			state.isEnabled = m_hitResult.linkUrl.isValid();
@@ -1109,43 +1107,46 @@ ActionsManager::ActionDefinition::State WebWidget::getActionState(int identifier
 
 				if (identifier == ActionsManager::OpenImageAction)
 				{
-					const SessionsManager::OpenHints hints(SessionsManager::calculateOpenHints(parameters));
+					switch (SessionsManager::calculateOpenHints(parameters))
+					{
+						case SessionsManager::CurrentTabOpen:
+							state.text = QCoreApplication::translate("actions", "Open Image in This Tab");
 
-					if (hints == SessionsManager::CurrentTabOpen)
-					{
-						state.text = QCoreApplication::translate("actions", "Open Image in This Tab");
-					}
-					else if (hints == SessionsManager::NewTabOpen)
-					{
-						state.text = QCoreApplication::translate("actions", "Open Image in New Tab");
-					}
-					else if (hints == (SessionsManager::NewTabOpen | SessionsManager::BackgroundOpen))
-					{
-						state.text = QCoreApplication::translate("actions", "Open Image in New Background Tab");
-					}
-					else if (hints == SessionsManager::NewWindowOpen)
-					{
-						state.text = QCoreApplication::translate("actions", "Open Image in New Window");
-					}
-					else if (hints == (SessionsManager::NewWindowOpen | SessionsManager::BackgroundOpen))
-					{
-						state.text = QCoreApplication::translate("actions", "Open Image in New Background Window");
-					}
-					else if (hints == (SessionsManager::NewTabOpen | SessionsManager::PrivateOpen))
-					{
-						state.text = QCoreApplication::translate("actions", "Open Image in New Private Tab");
-					}
-					else if (hints == (SessionsManager::NewTabOpen | SessionsManager::BackgroundOpen | SessionsManager::PrivateOpen))
-					{
-						state.text = QCoreApplication::translate("actions", "Open Image in New Private Background Tab");
-					}
-					else if (hints == (SessionsManager::NewWindowOpen | SessionsManager::PrivateOpen))
-					{
-						state.text = QCoreApplication::translate("actions", "Open Image in New Private Window");
-					}
-					else if (hints == (SessionsManager::NewWindowOpen | SessionsManager::BackgroundOpen | SessionsManager::PrivateOpen))
-					{
-						state.text = QCoreApplication::translate("actions", "Open Image in New Private Background Window");
+							break;
+						case SessionsManager::NewTabOpen:
+							state.text = QCoreApplication::translate("actions", "Open Image in New Tab");
+
+							break;
+						case (SessionsManager::NewTabOpen | SessionsManager::BackgroundOpen):
+							state.text = QCoreApplication::translate("actions", "Open Image in New Background Tab");
+
+							break;
+						case SessionsManager::NewWindowOpen:
+							state.text = QCoreApplication::translate("actions", "Open Image in New Window");
+
+							break;
+						case (SessionsManager::NewWindowOpen | SessionsManager::BackgroundOpen):
+							state.text = QCoreApplication::translate("actions", "Open Image in New Background Window");
+
+							break;
+						case (SessionsManager::NewTabOpen | SessionsManager::PrivateOpen):
+							state.text = QCoreApplication::translate("actions", "Open Image in New Private Tab");
+
+							break;
+						case (SessionsManager::NewTabOpen | SessionsManager::BackgroundOpen | SessionsManager::PrivateOpen):
+							state.text = QCoreApplication::translate("actions", "Open Image in New Private Background Tab");
+
+							break;
+						case (SessionsManager::NewWindowOpen | SessionsManager::PrivateOpen):
+							state.text = QCoreApplication::translate("actions", "Open Image in New Private Window");
+
+							break;
+						case (SessionsManager::NewWindowOpen | SessionsManager::BackgroundOpen | SessionsManager::PrivateOpen):
+							state.text = QCoreApplication::translate("actions", "Open Image in New Private Background Window");
+
+							break;
+						default:
+							break;
 					}
 
 					if (!fileName.isEmpty())
@@ -1261,16 +1262,15 @@ ActionsManager::ActionDefinition::State WebWidget::getActionState(int identifier
 
 			break;
 		case ActionsManager::RemoveHistoryIndexAction:
-			if (parameters.value(QLatin1String("clearGlobalHistory"), false).toBool())
 			{
-				state.text = QCoreApplication::translate("actions", "Purge History Entry");
-			}
+				const int index(parameters.contains(QLatin1String("index")) ? parameters[QLatin1String("index")].toInt() : -1);
 
-			if (parameters.contains(QLatin1String("index")))
-			{
-				const int index(parameters[QLatin1String("index")].toInt());
-
-				if (index >= 0 && index < getHistory().entries.count())
+				if (parameters.value(QLatin1String("clearGlobalHistory"), false).toBool())
+				{
+					state.text = QCoreApplication::translate("actions", "Purge History Entry");
+					state.isEnabled = (m_backend->getCapabilityScopes(WebBackend::HistoryMetaDataCapability).testFlag(WebBackend::TabScope) && getGlobalHistoryEntryIdentifier(index) > 0);
+				}
+				else if (index >= 0 && index < getHistory().entries.count())
 				{
 					state.isEnabled = true;
 				}
@@ -1690,6 +1690,13 @@ SessionsManager::OpenHints WebWidget::mapOpenActionToOpenHints(int identifier)
 quint64 WebWidget::getWindowIdentifier() const
 {
 	return m_windowIdentifier;
+}
+
+quint64 WebWidget::getGlobalHistoryEntryIdentifier(int index) const
+{
+	Q_UNUSED(index)
+
+	return 0;
 }
 
 int WebWidget::getAmountOfDeferredPlugins() const

@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2020 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -102,7 +102,18 @@ MainWindowSessionItem::MainWindowSessionItem(MainWindow *mainWindow) : SessionIt
 	connect(mainWindow, &MainWindow::titleChanged, this, &MainWindowSessionItem::notifyMainWindowModified);
 	connect(mainWindow, &MainWindow::activeWindowChanged, this, &MainWindowSessionItem::notifyMainWindowModified);
 	connect(mainWindow, &MainWindow::windowAdded, this, &MainWindowSessionItem::handleWindowAdded);
-	connect(mainWindow, &MainWindow::windowRemoved, this, &MainWindowSessionItem::handleWindowRemoved);
+	connect(mainWindow, &MainWindow::windowRemoved, this, [&](quint64 identifier)
+	{
+		for (int i = 0; i < rowCount(); ++i)
+		{
+			if (ItemModel::getItemData(child(i, 0), SessionModel::IdentifierRole).toULongLong() == identifier)
+			{
+				removeRow(i);
+
+				break;
+			}
+		}
+	});
 }
 
 void MainWindowSessionItem::handleWindowAdded(quint64 identifier)
@@ -116,19 +127,6 @@ void MainWindowSessionItem::handleWindowAdded(quint64 identifier)
 	}
 
 	insertRow(m_mainWindow->getWindowIndex(identifier), new WindowSessionItem(m_mainWindow->getWindowByIdentifier(identifier)));
-}
-
-void MainWindowSessionItem::handleWindowRemoved(quint64 identifier)
-{
-	for (int i = 0; i < rowCount(); ++i)
-	{
-		if (ItemModel::getItemData(child(i, 0), SessionModel::IdentifierRole).toULongLong() == identifier)
-		{
-			removeRow(i);
-
-			break;
-		}
-	}
 }
 
 void MainWindowSessionItem::notifyMainWindowModified()
@@ -262,7 +260,25 @@ SessionModel::SessionModel(QObject *parent) : QStandardItemModel(parent),
 	}
 
 	connect(Application::getInstance(), &Application::windowAdded, this, &SessionModel::handleMainWindowAdded);
-	connect(Application::getInstance(), &Application::windowRemoved, this, &SessionModel::handleMainWindowRemoved);
+	connect(Application::getInstance(), &Application::windowRemoved, this, [&](MainWindow *mainWindow)
+	{
+		if (!mainWindow)
+		{
+			return;
+		}
+
+		for (int i = 0; i < m_rootItem->rowCount(); ++i)
+		{
+			if (index(i, 0, m_rootItem->index()).data(IdentifierRole).toULongLong() == mainWindow->getIdentifier())
+			{
+				m_rootItem->removeRow(i);
+
+				break;
+			}
+		}
+
+		m_mainWindowItems.remove(mainWindow);
+	});
 	connect(Application::getInstance(), &Application::activeWindowChanged, this, &SessionModel::modelModified);
 	connect(this, &SessionModel::itemChanged, this, &SessionModel::modelModified);
 	connect(this, &SessionModel::rowsInserted, this, &SessionModel::modelModified);
@@ -292,26 +308,6 @@ void SessionModel::handleMainWindowAdded(MainWindow *mainWindow)
 	m_mainWindowItems[mainWindow] = item;
 
 	connect(mainWindow, &MainWindow::activeWindowChanged, this, &SessionModel::modelModified);
-}
-
-void SessionModel::handleMainWindowRemoved(MainWindow *mainWindow)
-{
-	if (!mainWindow)
-	{
-		return;
-	}
-
-	for (int i = 0; i < m_rootItem->rowCount(); ++i)
-	{
-		if (index(i, 0, m_rootItem->index()).data(IdentifierRole).toULongLong() == mainWindow->getIdentifier())
-		{
-			m_rootItem->removeRow(i);
-
-			break;
-		}
-	}
-
-	m_mainWindowItems.remove(mainWindow);
 }
 
 SessionItem* SessionModel::getRootItem() const

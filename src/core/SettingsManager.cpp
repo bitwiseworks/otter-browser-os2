@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2020 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 - 2016 Piotr Wójcik <chocimier@tlen.pl>
 * Copyright (C) 2016 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
@@ -261,13 +261,56 @@ void SettingsManager::createInstance(const QString &path)
 
 void SettingsManager::removeOverride(const QString &host, int identifier)
 {
-	if (identifier < 0)
+	QSettings settings(m_overridePath, QSettings::IniFormat);
+
+	if (identifier >= 0)
 	{
-		QSettings(m_overridePath, QSettings::IniFormat).remove(host);
+		settings.remove(host + QLatin1Char('/') + getOptionName(identifier));
+		settings.sync();
+
+		emit m_instance->hostOptionChanged(identifier, getOption(identifier), host);
+
+		return;
 	}
-	else
+
+	settings.beginGroup(host);
+
+	const QStringList groups(settings.childGroups());
+
+	if (groups.isEmpty())
 	{
-		QSettings(m_overridePath, QSettings::IniFormat).remove(host + QLatin1Char('/') + getOptionName(identifier));
+		return;
+	}
+
+	QVector<int> options;
+	options.reserve(groups.count());
+
+	for (int i = 0; i < groups.count(); ++i)
+	{
+		settings.beginGroup(groups.at(i));
+
+		const QStringList rawOptions(settings.childKeys());
+
+		for (int j = 0; j < rawOptions.count(); ++j)
+		{
+			const int option(getOptionIdentifier(groups.at(i) + QLatin1Char('/') + rawOptions.at(j)));
+
+			if (option >= 0)
+			{
+				options.append(option);
+			}
+		}
+
+		settings.endGroup();
+	}
+
+	settings.endGroup();
+	settings.remove(host);
+	settings.sync();
+
+	for (int i = 0; i < options.count(); ++i)
+	{
+		emit m_instance->hostOptionChanged(identifier, getOption(options.at(i)), host);
 	}
 }
 
@@ -285,19 +328,21 @@ void SettingsManager::registerOption(int identifier, OptionType type, const QVar
 
 void SettingsManager::saveOption(const QString &path, const QString &key, const QVariant &value, OptionType type)
 {
+	QSettings settings(path, QSettings::IniFormat);
+
 	if (value.isNull())
 	{
-		QSettings(path, QSettings::IniFormat).remove(key);
+		settings.remove(key);
 	}
 	else if (type == ColorType)
 	{
 		const QColor color(value.value<QColor>());
 
-		QSettings(path, QSettings::IniFormat).setValue(key, (color.isValid() ? color.name(QColor::HexArgb).toUpper() : QString()));
+		settings.setValue(key, (color.isValid() ? color.name(QColor::HexArgb).toUpper() : QString()));
 	}
 	else
 	{
-		QSettings(path, QSettings::IniFormat).setValue(key, value);
+		settings.setValue(key, value);
 	}
 }
 
@@ -557,6 +602,41 @@ QStringList SettingsManager::getOverrideHosts(int identifier)
 	return hosts;
 }
 
+QStringList SettingsManager::getOverridesHierarchy(const QString &host)
+{
+	QStringList hierarchy;
+
+	if (!m_hasWildcardedOverrides)
+	{
+		return hierarchy;
+	}
+
+	const QStringList groups(QSettings(m_overridePath, QSettings::IniFormat).childGroups());
+	const QStringList hostParts(host.split(QLatin1Char('.')));
+
+	for (int i = 0; i < hostParts.count(); ++i)
+	{
+		const QString explicitHost(hostParts.mid(i).join(QLatin1Char('.')));
+
+		if (i > 0)
+		{
+			const QString wildcardedHost(QLatin1String("*.") + explicitHost);
+
+			if (groups.contains(wildcardedHost))
+			{
+				hierarchy.append(wildcardedHost);
+			}
+		}
+
+		if (groups.contains(explicitHost))
+		{
+			hierarchy.append(explicitHost);
+		}
+	}
+
+	return hierarchy;
+}
+
 SettingsManager::OptionDefinition SettingsManager::getOptionDefinition(int identifier)
 {
 	if (identifier >= 0 && identifier < m_definitions.count())
@@ -608,6 +688,24 @@ int SettingsManager::getOptionIdentifier(const QString &name)
 	}
 
 	return staticMetaObject.enumerator(m_optionIdentifierEnumerator).keyToValue(mutableName.toLatin1());
+}
+
+int SettingsManager::getOverridesCount(int identifier)
+{
+	const QSettings overrides(m_overridePath, QSettings::IniFormat);
+	const QStringList overridesGroups(overrides.childGroups());
+	const QString optionName(getOptionName(identifier));
+	int amount(0);
+
+	for (int i = 0; i < overridesGroups.count(); ++i)
+	{
+		if (overrides.contains(overridesGroups.at(i) + QLatin1Char('/') + optionName))
+		{
+			++amount;
+		}
+	}
+
+	return amount;
 }
 
 bool SettingsManager::hasOverride(const QString &host, int identifier)

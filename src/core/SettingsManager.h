@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2020 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 - 2016 Piotr Wójcik <chocimier@tlen.pl>
 * Copyright (C) 2016 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
@@ -315,9 +315,11 @@ public:
 	static QVariant getOption(int identifier, const QString &host = {});
 	static QStringList getOptions();
 	static QStringList getOverrideHosts(int identifier = -1);
+	static QStringList getOverridesHierarchy(const QString &host);
 	static OptionDefinition getOptionDefinition(int identifier);
 	static int registerOption(const QString &name, OptionType type, const QVariant &defaultValue = {}, const QStringList &choices = {}, OptionDefinition::OptionFlags flags = static_cast<OptionDefinition::OptionFlags>(OptionDefinition::IsEnabledFlag | OptionDefinition::IsVisibleFlag));
 	static int getOptionIdentifier(const QString &name);
+	static int getOverridesCount(int identifier);
 	static bool hasOverride(const QString &host, int identifier = -1);
 
 protected:

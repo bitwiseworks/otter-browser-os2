@@ -21,7 +21,7 @@
 #include "QtWebKitWebWidget.h"
 #include "QtWebKitNetworkManager.h"
 #include "QtWebKitPage.h"
-#include "QtWebKitPluginWidget.h"
+#include "QtWebKitPluginFactory.h"
 #include "QtWebKitWebBackend.h"
 #include "../../../../core/Application.h"
 #include "../../../../core/BookmarksManager.h"
@@ -151,8 +151,6 @@ QtWebKitWebWidget::QtWebKitWebWidget(const QVariantMap &parameters, WebBackend *
 	connect(SettingsManager::getInstance(), &SettingsManager::optionChanged, this, &QtWebKitWebWidget::handleOptionChanged);
 	connect(m_page, &QtWebKitPage::requestedNewWindow, this, &QtWebKitWebWidget::requestedNewWindow);
 	connect(m_page, &QtWebKitPage::requestedPopupWindow, this, &QtWebKitWebWidget::requestedPopupWindow);
-	connect(m_page, &QtWebKitPage::saveFrameStateRequested, this, &QtWebKitWebWidget::saveState);
-	connect(m_page, &QtWebKitPage::restoreFrameStateRequested, this, &QtWebKitWebWidget::restoreState);
 	connect(m_page, &QtWebKitPage::downloadRequested, this, &QtWebKitWebWidget::handleDownloadRequested);
 	connect(m_page, &QtWebKitPage::unsupportedContent, this, &QtWebKitWebWidget::handleUnsupportedContent);
 	connect(m_page, &QtWebKitPage::linkHovered, this, &QtWebKitWebWidget::setStatusMessageOverride);
@@ -178,8 +176,6 @@ QtWebKitWebWidget::QtWebKitWebWidget(const QVariantMap &parameters, WebBackend *
 	connect(m_page->undoStack(), &QUndoStack::redoTextChanged, this, &QtWebKitWebWidget::notifyRedoActionStateChanged);
 	connect(m_page->undoStack(), &QUndoStack::canUndoChanged, this, &QtWebKitWebWidget::notifyUndoActionStateChanged);
 	connect(m_page->undoStack(), &QUndoStack::undoTextChanged, this, &QtWebKitWebWidget::notifyUndoActionStateChanged);
-	connect(m_networkManager, &QtWebKitNetworkManager::pageInformationChanged, this, &QtWebKitWebWidget::pageInformationChanged);
-	connect(m_networkManager, &QtWebKitNetworkManager::requestBlocked, this, &QtWebKitWebWidget::requestBlocked);
 	connect(m_networkManager, &QtWebKitNetworkManager::contentStateChanged, this, [&]()
 	{
 		emit contentStateChanged(getContentState());
@@ -310,7 +306,7 @@ void QtWebKitWebWidget::triggerAction(int identifier, const QVariantMap &paramet
 			{
 				for (int i = 0; i < m_page->history()->count(); ++i)
 				{
-					const quint64 historyIdentifier(m_page->history()->itemAt(i).userData().toList().value(IdentifierEntryData).toULongLong());
+					const quint64 historyIdentifier(getGlobalHistoryEntryIdentifier(i));
 
 					if (historyIdentifier > 0)
 					{
@@ -517,21 +513,20 @@ void QtWebKitWebWidget::triggerAction(int identifier, const QVariantMap &paramet
 
 					element.setAttribute(QLatin1String("src"), src);
 
-					m_page->mainFrame()->documentElement().evaluateJavaScript(QStringLiteral("var images = document.querySelectorAll('img[src=\"%1\"]'); for (var i = 0; i < images.length; ++i) { images[i].src = ''; images[i].src = '%1'; }").arg(src));
+					m_page->mainFrame()->documentElement().evaluateJavaScript(QStringLiteral("let images = document.querySelectorAll('img[src=\"%1\"]'); for (let i = 0; i < images.length; ++i) { images[i].src = ''; images[i].src = '%1'; }").arg(src));
 				}
 			}
 
 			break;
 		case ActionsManager::ImagePropertiesAction:
 			{
-				QVariantMap properties({{QLatin1String("alternativeText"), hitResult.alternateText}, {QLatin1String("longDescription"), hitResult.longDescription}});
+				QMap<ImagePropertiesDialog::ImageProperty, QVariant> properties({{ImagePropertiesDialog::AlternativeTextProperty, hitResult.alternateText}, {ImagePropertiesDialog::LongDescriptionProperty, hitResult.longDescription}});
 				const QPixmap pixmap(m_page->mainFrame()->hitTestContent(hitResult.hitPosition).pixmap());
 
 				if (!pixmap.isNull())
 				{
-					properties[QLatin1String("width")] = pixmap.width();
-					properties[QLatin1String("height")] = pixmap.height();
-					properties[QLatin1String("depth")] = pixmap.depth();
+					properties[ImagePropertiesDialog::SizeProperty] = pixmap.size();
+					properties[ImagePropertiesDialog::DepthProperty] = pixmap.depth();
 				}
 
 				ImagePropertiesDialog *imagePropertiesDialog(new ImagePropertiesDialog(hitResult.imageUrl, properties, (m_networkManager->cache() ? m_networkManager->cache()->data(hitResult.imageUrl) : nullptr), this));
@@ -628,7 +623,7 @@ void QtWebKitWebWidget::triggerAction(int identifier, const QVariantMap &paramet
 				{
 					if (parameters.value(QLatin1String("clearGlobalHistory"), false).toBool())
 					{
-						const quint64 entryIdentifier(m_page->history()->itemAt(index).userData().toList().value(IdentifierEntryData).toULongLong());
+						const quint64 entryIdentifier(getGlobalHistoryEntryIdentifier(index));
 
 						if (entryIdentifier > 0)
 						{
@@ -776,6 +771,10 @@ void QtWebKitWebWidget::triggerAction(int identifier, const QVariantMap &paramet
 				m_page->triggerAction(QWebPage::Paste);
 
 				Application::clipboard()->setMimeData(mimeData);
+			}
+			else if (parameters.value(QLatin1String("mode")) == QLatin1String("plainText"))
+			{
+				m_page->triggerAction(QWebPage::PasteAndMatchStyle);
 			}
 			else
 			{
@@ -1161,41 +1160,6 @@ void QtWebKitWebWidget::print(QPrinter *printer)
 	m_page->mainFrame()->print(printer);
 }
 
-void QtWebKitWebWidget::saveState(QWebFrame *frame, QWebHistoryItem *item)
-{
-	if (frame == m_page->mainFrame())
-	{
-		QVariantList state(m_page->history()->currentItem().userData().toList());
-
-		if (state.isEmpty() || state.count() < 4)
-		{
-			state = {0, getZoom(), m_page->mainFrame()->scrollPosition(), QDateTime::currentDateTimeUtc()};
-		}
-		else
-		{
-			state[ZoomEntryData] = getZoom();
-			state[PositionEntryData] = m_page->mainFrame()->scrollPosition();
-		}
-
-		item->setUserData(state);
-	}
-}
-
-void QtWebKitWebWidget::restoreState(QWebFrame *frame)
-{
-	if (frame == m_page->mainFrame())
-	{
-		const QVariantList state(m_page->history()->currentItem().userData().toList());
-
-		setZoom(state.value(ZoomEntryData, getZoom()).toInt());
-
-		if (m_page->mainFrame()->scrollPosition().isNull())
-		{
-			m_page->mainFrame()->setScrollPosition(state.value(PositionEntryData).toPoint());
-		}
-	}
-}
-
 void QtWebKitWebWidget::clearPluginToken()
 {
 	QList<QWebFrame*> frames({m_page->mainFrame()});
@@ -1516,7 +1480,7 @@ void QtWebKitWebWidget::handleHistory()
 
 	if (state.isValid())
 	{
-		const quint64 identifier(state.toList().value(IdentifierEntryData).toULongLong());
+		const quint64 identifier(state.toList().value(QtWebKitPage::IdentifierEntryData).toULongLong());
 
 		if (identifier > 0)
 		{
@@ -2056,7 +2020,7 @@ QString QtWebKitWebWidget::getDescription() const
 
 QString QtWebKitWebWidget::getActiveStyleSheet() const
 {
-	if (m_page->mainFrame()->documentElement().evaluateJavaScript(QLatin1String("var isDefault = true; for (var i = 0; i < document.styleSheets.length; ++i) { if (document.styleSheets[i].ownerNode.rel.indexOf('alt') >= 0) { isDefault = false; break; } } isDefault")).toBool())
+	if (m_page->mainFrame()->documentElement().evaluateJavaScript(QLatin1String("let isDefault = true; for (let i = 0; i < document.styleSheets.length; ++i) { if (document.styleSheets[i].ownerNode.rel.indexOf('alt') >= 0) { isDefault = false; break; } } isDefault")).toBool())
 	{
 		return {};
 	}
@@ -2279,8 +2243,8 @@ Session::Window::History QtWebKitWebWidget::getHistory() const
 	}
 	else
 	{
-		state[ZoomEntryData] = getZoom();
-		state[PositionEntryData] = m_page->mainFrame()->scrollPosition();
+		state[QtWebKitPage::ZoomEntryData] = getZoom();
+		state[QtWebKitPage::PositionEntryData] = m_page->mainFrame()->scrollPosition();
 	}
 
 	m_page->history()->currentItem().setUserData(state);
@@ -2299,11 +2263,11 @@ Session::Window::History QtWebKitWebWidget::getHistory() const
 		Session::Window::History::Entry entry;
 		entry.url = item.url().toString();
 		entry.title = item.title();
-		entry.time = itemState.value(VisitTimeEntryData).toDateTime();
-		entry.position = itemState.value(PositionEntryData, QPoint(0, 0)).toPoint();
-		entry.zoom = itemState.value(ZoomEntryData).toInt();
+		entry.time = itemState.value(QtWebKitPage::VisitTimeEntryData).toDateTime();
+		entry.position = itemState.value(QtWebKitPage::PositionEntryData, QPoint(0, 0)).toPoint();
+		entry.zoom = itemState.value(QtWebKitPage::ZoomEntryData).toInt();
 
-		const quint64 identifier(itemState.value(IdentifierEntryData).toULongLong());
+		const quint64 identifier(itemState.value(QtWebKitPage::IdentifierEntryData).toULongLong());
 
 		if (identifier > 0)
 		{
@@ -2323,8 +2287,8 @@ Session::Window::History QtWebKitWebWidget::getHistory() const
 		Session::Window::History::Entry entry;
 		entry.url = requestedUrl.toString();
 		entry.title = getTitle();
-		entry.position = state.value(PositionEntryData, QPoint(0, 0)).toPoint();
-		entry.zoom = state.value(ZoomEntryData).toInt();
+		entry.position = state.value(QtWebKitPage::PositionEntryData, QPoint(0, 0)).toPoint();
+		entry.zoom = state.value(QtWebKitPage::ZoomEntryData).toInt();
 
 		history.entries.append(entry);
 		history.index = historyCount;
@@ -2575,6 +2539,21 @@ WebWidget::LoadingState QtWebKitWebWidget::getLoadingState() const
 	return m_loadingState;
 }
 
+quint64 QtWebKitWebWidget::getGlobalHistoryEntryIdentifier(int index) const
+{
+	if (index >= 0 && index < m_page->history()->count())
+	{
+		const QVariant state(m_page->history()->itemAt(index).userData());
+
+		if (state.isValid())
+		{
+			return state.toList().value(QtWebKitPage::IdentifierEntryData).toULongLong();
+		}
+	}
+
+	return 0;
+}
+
 int QtWebKitWebWidget::getZoom() const
 {
 	return static_cast<int>(m_page->mainFrame()->zoomFactor() * 100);
@@ -2789,6 +2768,7 @@ bool QtWebKitWebWidget::eventFilter(QObject *object, QEvent *event)
 
 					const HitTestResult hitResult(getCurrentHitTestResult());
 					QVector<GesturesManager::GesturesContext> contexts;
+					contexts.reserve(1);
 
 					if (hitResult.flags.testFlag(HitTestResult::IsContentEditableTest))
 					{

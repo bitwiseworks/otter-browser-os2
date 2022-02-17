@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2015 - 2017 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -93,35 +93,43 @@ void AcceptCookieDialog::handleButtonClicked(QAbstractButton *button)
 	const QDialogButtonBox::ButtonRole role(m_ui->buttonBox->buttonRole(button));
 	const AcceptCookieResult result((role == QDialogButtonBox::AcceptRole) ? ((button->objectName() == QLatin1String("sessionOnly")) ? AcceptAsSessionCookie : AcceptCookie) : IgnoreCookie);
 
-	if (m_operation == CookieJar::InsertCookie)
+	switch (m_operation)
 	{
-		if (result == AcceptCookieDialog::AcceptAsSessionCookie)
-		{
-			m_cookie.setExpirationDate({});
+		case CookieJar::InsertCookie:
+			if (result == AcceptAsSessionCookie)
+			{
+				m_cookie.setExpirationDate({});
 
-			m_cookieJar->forceInsertCookie(m_cookie);
-		}
-		else if (result == AcceptCookieDialog::AcceptCookie)
-		{
-			m_cookieJar->forceInsertCookie(m_cookie);
-		}
-	}
-	else if (m_operation == CookieJar::UpdateCookie)
-	{
-		if (result == AcceptCookieDialog::AcceptAsSessionCookie)
-		{
-			m_cookie.setExpirationDate({});
+				m_cookieJar->forceInsertCookie(m_cookie);
+			}
+			else if (result == AcceptCookie)
+			{
+				m_cookieJar->forceInsertCookie(m_cookie);
+			}
 
-			m_cookieJar->forceUpdateCookie(m_cookie);
-		}
-		else if (result == AcceptCookieDialog::AcceptCookie)
-		{
-			m_cookieJar->forceUpdateCookie(m_cookie);
-		}
-	}
-	else if (m_operation == CookieJar::InsertCookie && result != AcceptCookieDialog::IgnoreCookie)
-	{
-		m_cookieJar->forceDeleteCookie(m_cookie);
+			break;
+		case CookieJar::UpdateCookie:
+			if (result == AcceptAsSessionCookie)
+			{
+				m_cookie.setExpirationDate({});
+
+				m_cookieJar->forceUpdateCookie(m_cookie);
+			}
+			else if (result == AcceptCookieDialog::AcceptCookie)
+			{
+				m_cookieJar->forceUpdateCookie(m_cookie);
+			}
+
+			break;
+		case CookieJar::RemoveCookie:
+			if (result == AcceptCookieDialog::AcceptCookie)
+			{
+				m_cookieJar->forceDeleteCookie(m_cookie);
+			}
+
+			break;
+		default:
+			break;
 	}
 
 	accept();

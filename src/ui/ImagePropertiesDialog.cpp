@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2020 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -29,7 +29,7 @@
 namespace Otter
 {
 
-ImagePropertiesDialog::ImagePropertiesDialog(const QUrl &url, const QVariantMap &properties, QIODevice *device, QWidget *parent) : Dialog(parent),
+ImagePropertiesDialog::ImagePropertiesDialog(const QUrl &url, const QMap<ImageProperty, QVariant> &properties, QIODevice *device, QWidget *parent) : Dialog(parent),
 	m_ui(new Ui::ImagePropertiesDialog)
 {
 	m_ui->setupUi(this);
@@ -38,8 +38,8 @@ ImagePropertiesDialog::ImagePropertiesDialog(const QUrl &url, const QVariantMap 
 	m_ui->sizeLabelWidget->setText(tr("Unknown"));
 	m_ui->typeLabelWidget->setText(tr("Unknown"));
 	m_ui->fileSizeLabelWidget->setText(tr("Unknown"));
-	m_ui->alternativeTextLabelWidget->setText(properties.value(QLatin1String("alternativeText")).toString());
-	m_ui->longDescriptionLabelWidget->setText(properties.value(QLatin1String("longDescription")).toString());
+	m_ui->alternativeTextLabelWidget->setText(properties.value(AlternativeTextProperty).toString());
+	m_ui->longDescriptionLabelWidget->setText(properties.value(LongDescriptionProperty).toString());
 
 	if (!device && url.scheme() == QLatin1String("data"))
 	{
@@ -50,50 +50,47 @@ ImagePropertiesDialog::ImagePropertiesDialog(const QUrl &url, const QVariantMap 
 		device = buffer;
 	}
 
-	QImage image;
+	QSize size(properties.contains(SizeProperty) ? properties[SizeProperty].toSize() : QSize());
+	int depth(properties.contains(DepthProperty) ? properties[DepthProperty].toInt() : -1);
 	int frames(1);
 
 	if (device)
 	{
-		m_ui->fileSizeLabelWidget->setText(Utils::formatUnit(device->size(), false, 2, true));
-
 		QImageReader reader(device);
 
 		frames = reader.imageCount();
 
-		image = reader.read();
-	}
+		const QImage image(reader.read());
 
-	if (!image.isNull())
-	{
-		if (frames > 1)
-		{
-			m_ui->sizeLabelWidget->setText(tr("%1 x %2 pixels @ %3 bits per pixel in %n frame(s)", "", frames).arg(image.width()).arg(image.height()).arg(image.depth()));
-		}
-		else
-		{
-			m_ui->sizeLabelWidget->setText(tr("%1 x %2 pixels @ %3 bits per pixel").arg(image.width()).arg(image.height()).arg(image.depth()));
-		}
-	}
-	else if (properties.contains(QLatin1String("width")))
-	{
-		if (properties.contains(QLatin1String("depth")))
-		{
-			m_ui->sizeLabelWidget->setText(tr("%1 x %2 pixels @ %3 bits per pixel").arg(properties.value(QLatin1String("width")).toInt()).arg(properties.value(QLatin1String("height")).toInt()).arg(properties.value(QLatin1String("depth")).toInt()));
-		}
-		else
-		{
-			m_ui->sizeLabelWidget->setText(tr("%1 x %2 pixels").arg(properties.value(QLatin1String("width")).toInt()).arg(properties.value(QLatin1String("height")).toInt()));
-		}
-	}
+		size = image.size();
 
-	if (device)
-	{
+		depth = image.depth();
+
 		device->reset();
 
+		m_ui->fileSizeLabelWidget->setText(Utils::formatUnit(device->size(), false, 2, true));
 		m_ui->typeLabelWidget->setText(QMimeDatabase().mimeTypeForData(device).comment());
 
 		device->deleteLater();
+	}
+
+	if (size.isValid())
+	{
+		if (depth > 0)
+		{
+			if (frames > 1)
+			{
+				m_ui->sizeLabelWidget->setText(tr("%1 x %2 pixels @ %3 bits per pixel in %n frame(s)", "", frames).arg(size.width()).arg(size.height()).arg(depth));
+			}
+			else
+			{
+				m_ui->sizeLabelWidget->setText(tr("%1 x %2 pixels @ %3 bits per pixel").arg(size.width()).arg(size.height()).arg(depth));
+			}
+		}
+		else
+		{
+			m_ui->sizeLabelWidget->setText(tr("%1 x %2 pixels").arg(size.width()).arg(size.height()));
+		}
 	}
 
 	setMinimumWidth(400);

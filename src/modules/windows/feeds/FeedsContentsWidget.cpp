@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2018 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2018 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -20,6 +20,7 @@
 #include "FeedsContentsWidget.h"
 #include "../../../core/Application.h"
 #include "../../../core/BookmarksManager.h"
+#include "../../../core/HandlersManager.h"
 #include "../../../core/ThemesManager.h"
 #include "../../../ui/Action.h"
 #include "../../../ui/Animation.h"
@@ -28,7 +29,6 @@
 
 #include "ui_FeedsContentsWidget.h"
 
-#include <QtGui/QDesktopServices>
 #include <QtWidgets/QDesktopWidget>
 #include <QtWidgets/QInputDialog>
 #include <QtWidgets/QMenu>
@@ -121,7 +121,7 @@ FeedsContentsWidget::FeedsContentsWidget(const QVariantMap &parameters, QWidget 
 	{
 		const QModelIndex index(m_ui->entriesViewWidget->currentIndex());
 
-		QDesktopServices::openUrl(QLatin1String("mailto:") + index.sibling(index.row(), 0).data(EmailRole).toString());
+		HandlersManager::handleUrl(QLatin1String("mailto:") + index.sibling(index.row(), 0).data(EmailRole).toString());
 	});
 	connect(m_ui->urlButton, &QToolButton::clicked, [&]()
 	{
@@ -149,6 +149,11 @@ void FeedsContentsWidget::changeEvent(QEvent *event)
 			m_feedModel->setHorizontalHeaderLabels({tr("Title"), tr("From"), tr("Published")});
 		}
 	}
+}
+
+void FeedsContentsWidget::print(QPrinter *printer)
+{
+	m_ui->textBrowserWidget->print(printer);
 }
 
 void FeedsContentsWidget::triggerAction(int identifier, const QVariantMap &parameters, ActionsManager::TriggerType trigger)
@@ -394,6 +399,16 @@ void FeedsContentsWidget::showFeedsContextMenu(const QPoint &position)
 						menu.addAction(ThemesManager::createIcon(QLatin1String("view-refresh")), QCoreApplication::translate("actions", "Update"), this, &FeedsContentsWidget::updateFeed);
 						menu.addSeparator();
 						menu.addAction(ThemesManager::createIcon(QLatin1String("document-open")), QCoreApplication::translate("actions", "Open"), this, &FeedsContentsWidget::openFeed);
+						menu.addSeparator();
+						menu.addAction(tr("Mark All as Read"), this, [&]()
+						{
+							if (m_feed)
+							{
+								m_feed->markAllEntriesAsRead();
+
+								updateFeedModel();
+							}
+						});
 					}
 
 					menu.addSeparator();
@@ -730,16 +745,16 @@ void FeedsContentsWidget::setFeed(Feed *feed)
 			m_feed->update();
 		}
 
-		if (!FeedsManager::getModel()->hasFeed(m_feed->getUrl()))
+		if (FeedsManager::getModel()->hasFeed(m_feed->getUrl()))
+		{
+			m_ui->subscribeFeedWidget->hide();
+		}
+		else
 		{
 			m_ui->iconLabel->setPixmap(ThemesManager::createIcon(QLatin1String("application-rss+xml"), false).pixmap(m_ui->iconLabel->size()));
 			m_ui->messageLabel->setText(tr("Subscribe to this feed using:"));
 
 			m_ui->subscribeFeedWidget->show();
-		}
-		else
-		{
-			m_ui->subscribeFeedWidget->hide();
 		}
 
 		connect(m_feed, &Feed::entriesModified, this, &FeedsContentsWidget::updateFeedModel);
