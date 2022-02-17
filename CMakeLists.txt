@@ -143,6 +143,7 @@ set(otter_src
 	src/ui/AcceptCookieDialog.cpp
 	src/ui/Action.cpp
 	src/ui/ActionComboBoxWidget.cpp
+	src/ui/ActionParametersDialog.cpp
 	src/ui/Animation.cpp
 	src/ui/ApplicationComboBoxWidget.cpp
 	src/ui/AuthenticationDialog.cpp
@@ -164,6 +165,7 @@ set(otter_src
 	src/ui/FeedPropertiesDialog.cpp
 	src/ui/FeedsComboBoxWidget.cpp
 	src/ui/FilePathWidget.cpp
+	src/ui/HeaderWidget.cpp
 	src/ui/IconWidget.cpp
 	src/ui/ImagePropertiesDialog.cpp
 	src/ui/ItemDelegate.cpp
@@ -174,6 +176,7 @@ set(otter_src
 	src/ui/MasterPasswordDialog.cpp
 	src/ui/Menu.cpp
 	src/ui/MenuBarWidget.cpp
+	src/ui/MetaDataDialog.cpp
 	src/ui/NotificationDialog.cpp
 	src/ui/OpenAddressDialog.cpp
 	src/ui/OpenBookmarkDialog.cpp
@@ -217,7 +220,6 @@ set(otter_src
 	src/ui/WorkspaceWidget.cpp
 	src/ui/preferences/AcceptLanguageDialog.cpp
 	src/ui/preferences/CookiesExceptionsDialog.cpp
-	src/ui/preferences/KeyboardProfileDialog.cpp
 	src/ui/preferences/MouseProfileDialog.cpp
 	src/ui/preferences/ProxyPropertiesDialog.cpp
 	src/ui/preferences/UserAgentPropertiesDialog.cpp
@@ -250,6 +252,7 @@ set(otter_src
 	src/modules/windows/bookmarks/BookmarksContentsWidget.cpp
 	src/modules/windows/cache/CacheContentsWidget.cpp
 	src/modules/windows/configuration/ConfigurationContentsWidget.cpp
+	src/modules/windows/configuration/OverridesDialog.cpp
 	src/modules/windows/contentFilters/ContentFiltersContentsWidget.cpp
 	src/modules/windows/cookies/CookiesContentsWidget.cpp
 	src/modules/windows/history/HistoryContentsWidget.cpp
@@ -261,6 +264,7 @@ set(otter_src
 	src/modules/windows/preferences/AdvancedPreferencesPage.cpp
 	src/modules/windows/preferences/ContentPreferencesPage.cpp
 	src/modules/windows/preferences/GeneralPreferencesPage.cpp
+	src/modules/windows/preferences/InputPreferencesPage.cpp
 	src/modules/windows/preferences/PreferencesContentsWidget.cpp
 	src/modules/windows/preferences/PreferencesPage.cpp
 	src/modules/windows/preferences/PrivacyPreferencesPage.cpp
@@ -289,6 +293,7 @@ qt5_add_resources(otter_res
 
 qt5_wrap_ui(otter_ui
 	src/ui/AcceptCookieDialog.ui
+	src/ui/ActionParametersDialog.ui
 	src/ui/AuthenticationDialog.ui
 	src/ui/BookmarkPropertiesDialog.ui
 	src/ui/BookmarksImportOptionsWidget.ui
@@ -302,6 +307,7 @@ qt5_wrap_ui(otter_ui
 	src/ui/LocaleDialog.ui
 	src/ui/MainWindow.ui
 	src/ui/MasterPasswordDialog.ui
+	src/ui/MetaDataDialog.ui
 	src/ui/OpenAddressDialog.ui
 	src/ui/OpenBookmarkDialog.ui
 	src/ui/PreferencesDialog.ui
@@ -319,7 +325,6 @@ qt5_wrap_ui(otter_ui
 	src/ui/WebsitePreferencesDialog.ui
 	src/ui/preferences/AcceptLanguageDialog.ui
 	src/ui/preferences/CookiesExceptionsDialog.ui
-	src/ui/preferences/KeyboardProfileDialog.ui
 	src/ui/preferences/MouseProfileDialog.ui
 	src/ui/preferences/ProxyPropertiesDialog.ui
 	src/ui/preferences/UserAgentPropertiesDialog.ui
@@ -330,6 +335,7 @@ qt5_wrap_ui(otter_ui
 	src/modules/windows/bookmarks/BookmarksContentsWidget.ui
 	src/modules/windows/cache/CacheContentsWidget.ui
 	src/modules/windows/configuration/ConfigurationContentsWidget.ui
+	src/modules/windows/configuration/OverridesDialog.ui
 	src/modules/windows/contentFilters/ContentFiltersContentsWidget.ui
 	src/modules/windows/cookies/CookiesContentsWidget.ui
 	src/modules/windows/feeds/FeedsContentsWidget.ui
@@ -341,6 +347,7 @@ qt5_wrap_ui(otter_ui
 	src/modules/windows/preferences/AdvancedPreferencesPage.ui
 	src/modules/windows/preferences/ContentPreferencesPage.ui
 	src/modules/windows/preferences/GeneralPreferencesPage.ui
+	src/modules/windows/preferences/InputPreferencesPage.ui
 	src/modules/windows/preferences/PreferencesContentsWidget.ui
 	src/modules/windows/preferences/PrivacyPreferencesPage.ui
 	src/modules/windows/preferences/SearchPreferencesPage.ui
@@ -400,7 +407,6 @@ if (Qt5WebKitWidgets_FOUND AND ENABLE_QTWEBKIT)
 		src/modules/backends/web/qtwebkit/QtWebKitPage.cpp
 		src/modules/backends/web/qtwebkit/QtWebKitPlugin.cpp
 		src/modules/backends/web/qtwebkit/QtWebKitPluginFactory.cpp
-		src/modules/backends/web/qtwebkit/QtWebKitPluginWidget.cpp
 		src/modules/backends/web/qtwebkit/QtWebKitWebBackend.cpp
 		src/modules/backends/web/qtwebkit/QtWebKitWebWidget.cpp
 		src/modules/backends/web/qtwebkit/3rdparty/qtftp/qftp.cpp

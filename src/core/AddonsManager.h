@@ -34,6 +34,15 @@ class WebBackend;
 class Addon
 {
 public:
+	struct MetaData
+	{
+		QString title;
+		QString description;
+		QString author;
+		QString version;
+		QUrl homePage;
+	};
+
 	enum AddonType
 	{
 		UnknownType = 0,

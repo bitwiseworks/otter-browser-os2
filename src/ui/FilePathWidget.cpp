@@ -65,8 +65,8 @@ FilePathWidget::FilePathWidget(QWidget *parent) : QWidget(parent),
 	connect(m_lineEditWidget, &LineEditWidget::textChanged, this, &FilePathWidget::pathChanged);
 	connect(m_browseButton, &QPushButton::clicked, this, [&]()
 	{
-		QString path(m_lineEditWidget->text().isEmpty() ? QStandardPaths::standardLocations(QStandardPaths::HomeLocation).value(0) : m_lineEditWidget->text());
-		path = ((m_openMode == FileMode) ? QFileDialog::getOpenFileName(this, tr("Select File"), path, m_filter) : QFileDialog::getExistingDirectory(this, tr("Select Directory"), path));
+		const QString directory(m_lineEditWidget->text().isEmpty() ? QStandardPaths::standardLocations(QStandardPaths::HomeLocation).value(0) : m_lineEditWidget->text());
+		const QString path((m_openMode == FileMode) ? QFileDialog::getOpenFileName(this, tr("Select File"), directory, m_filter) : QFileDialog::getExistingDirectory(this, tr("Select Directory"), directory));
 
 		if (!path.isEmpty())
 		{
@@ -105,21 +105,23 @@ void FilePathWidget::focusOutEvent(QFocusEvent *event)
 
 void FilePathWidget::updateCompleter()
 {
-	if (!m_completer)
+	if (m_completer)
 	{
-		m_completer = new QCompleter(this);
-
-		FileSystemCompleterModel *model(new FileSystemCompleterModel(m_completer));
-		model->setFilter((m_openMode == FileMode) ? (QDir::AllDirs | QDir::Files) : QDir::AllDirs);
-
-		m_completer->setModel(model);
-
-		m_lineEditWidget->setCompleter(m_completer);
-
-		m_completer->complete();
-
-		disconnect(m_lineEditWidget, &LineEditWidget::textEdited, this, &FilePathWidget::updateCompleter);
+		return;
 	}
+
+	m_completer = new QCompleter(this);
+
+	FileSystemCompleterModel *model(new FileSystemCompleterModel(m_completer));
+	model->setFilter((m_openMode == FileMode) ? (QDir::AllDirs | QDir::Files) : QDir::AllDirs);
+
+	m_completer->setModel(model);
+
+	m_lineEditWidget->setCompleter(m_completer);
+
+	m_completer->complete();
+
+	disconnect(m_lineEditWidget, &LineEditWidget::textEdited, this, &FilePathWidget::updateCompleter);
 }
 
 void FilePathWidget::setFilters(const QStringList &filters)

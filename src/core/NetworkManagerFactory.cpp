@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2013 - 2020 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2013 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2014 Piotr Wójcik <chocimier@tlen.pl>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -588,15 +588,16 @@ void NetworkManagerFactory::updateProxiesOption()
 		}
 	}
 
+	proxiesOption.choices.squeeze();
+
 	SettingsManager::updateOptionDefinition(SettingsManager::Network_ProxyOption, proxiesOption);
 }
 
 void NetworkManagerFactory::updateUserAgentsOption()
 {
 	SettingsManager::OptionDefinition userAgentsOption(SettingsManager::getOptionDefinition(SettingsManager::Network_UserAgentOption));
-	userAgentsOption.choices.clear();
+	userAgentsOption.choices = {{QCoreApplication::translate("userAgents", "Default User Agent"), QLatin1String("default"), {}}};
 	userAgentsOption.choices.reserve(qRound(m_userAgents.count() * 0.75));
-	userAgentsOption.choices.append({QCoreApplication::translate("userAgents", "Default User Agent"), QLatin1String("default"), {}});
 
 	QMap<QString, UserAgentDefinition>::iterator iterator;
 
@@ -607,6 +608,8 @@ void NetworkManagerFactory::updateUserAgentsOption()
 			userAgentsOption.choices.append({iterator.value().getTitle(), iterator.value().identifier, {}});
 		}
 	}
+
+	userAgentsOption.choices.squeeze();
 
 	SettingsManager::updateOptionDefinition(SettingsManager::Network_UserAgentOption, userAgentsOption);
 }
@@ -634,7 +637,7 @@ NetworkCache* NetworkManagerFactory::getCache()
 {
 	if (!m_cache)
 	{
-		m_cache = new NetworkCache(QCoreApplication::instance());
+		m_cache = new NetworkCache(SessionsManager::getCachePath(), QCoreApplication::instance());
 	}
 
 	return m_cache;

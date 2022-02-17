@@ -1,7 +1,7 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
 * Copyright (C) 2014 - 2015 Piotr Wójcik <chocimier@tlen.pl>
-* Copyright (C) 2015 - 2020 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2015 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -22,6 +22,7 @@
 #define OTTER_SIDEBARWIDGET_H
 
 #include <QtWidgets/QToolButton>
+#include <QtWidgets/QToolBar>
 
 namespace Otter
 {
@@ -61,8 +62,9 @@ protected slots:
 	void updatePanels();
 
 private:
-	ToolBarWidget *m_toolBarWidget;
+	ToolBarWidget *m_parentToolBarWidget;
 	ResizerWidget *m_resizerWidget;
+	QToolBar *m_toolBar;
 	QString m_currentPanel;
 	QHash<QString, QToolButton*> m_buttons;
 	QHash<QString, ContentsWidget*> m_panels;

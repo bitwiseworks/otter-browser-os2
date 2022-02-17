@@ -71,6 +71,10 @@ KeyboardProfile::KeyboardProfile(const QString &identifier, LoadMode mode) :
 		{
 			m_version = value;
 		}
+		else if (key == QLatin1String("HomePage"))
+		{
+			m_homePage = QUrl(value);
+		}
 	}
 
 	if (mode == MetaDataOnlyMode)
@@ -97,29 +101,17 @@ KeyboardProfile::KeyboardProfile(const QString &identifier, LoadMode mode) :
 				continue;
 			}
 
-			const QJsonArray shortcutsArray(actionObject.value(QLatin1String("shortcuts")).toArray());
-			QVector<QKeySequence> shortcuts;
-			shortcuts.reserve(shortcutsArray.count());
+			const QVector<QKeySequence> shortcuts(loadShortcuts(actionObject.value(QLatin1String("shortcuts")).toArray(), areSingleKeyShortcutsAllowed));
+			const QVector<QKeySequence> disabledShortcuts(loadShortcuts(actionObject.value(QLatin1String("disabledShortcuts")).toArray(), true));
 
-			for (int k = 0; k < shortcutsArray.count(); ++k)
-			{
-				const QKeySequence shortcut(shortcutsArray.at(k).toString());
-
-				if (shortcut.isEmpty() || (!areSingleKeyShortcutsAllowed && !ActionsManager::isShortcutAllowed(shortcut, ActionsManager::DisallowSingleKeyShortcutCheck, false)))
-				{
-					continue;
-				}
-
-				shortcuts.append(shortcut);
-			}
-
-			if (shortcuts.isEmpty())
+			if (shortcuts.isEmpty() && disabledShortcuts.isEmpty())
 			{
 				continue;
 			}
 
 			KeyboardProfile::Action definition;
 			definition.shortcuts = shortcuts;
+			definition.disabledShortcuts = disabledShortcuts;
 			definition.parameters = actionObject.value(QLatin1String("parameters")).toVariant().toMap();
 			definition.action = action;
 
@@ -175,6 +167,16 @@ void KeyboardProfile::setDefinitions(const QHash<int, QVector<KeyboardProfile::A
 	}
 }
 
+void KeyboardProfile::setMetaData(const MetaData &metaData)
+{
+	setTitle(metaData.title);
+	setDescription(metaData.description);
+	setVersion(metaData.version);
+	setAuthor(metaData.author);
+
+	m_homePage = metaData.homePage;
+}
+
 void KeyboardProfile::setModified(bool isModified)
 {
 	m_isModified = isModified;
@@ -205,9 +207,58 @@ QString KeyboardProfile::getVersion() const
 	return m_version;
 }
 
+QUrl KeyboardProfile::getHomePage() const
+{
+	return m_homePage;
+}
+
+Addon::MetaData KeyboardProfile::getMetaData() const
+{
+	Addon::MetaData metaData;
+	metaData.title = getTitle();
+	metaData.description = getDescription();
+	metaData.version = getVersion();
+	metaData.author = getAuthor();
+	metaData.homePage = getHomePage();
+
+	return metaData;
+}
+
 QHash<int, QVector<KeyboardProfile::Action> > KeyboardProfile::getDefinitions() const
 {
 	return m_definitions;
+}
+
+QJsonArray KeyboardProfile::createShortcutsArray(const QVector<QKeySequence> &shortcuts) const
+{
+	QJsonArray array;
+
+	for (int i = 0; i < shortcuts.count(); ++i)
+	{
+		array.append(shortcuts.at(i).toString());
+	}
+
+	return array;
+}
+
+QVector<QKeySequence> KeyboardProfile::loadShortcuts(const QJsonArray &rawShortcuts, bool areSingleKeyShortcutsAllowed) const
+{
+	QVector<QKeySequence> shortcuts;
+	shortcuts.reserve(rawShortcuts.count());
+
+	for (int i = 0; i < rawShortcuts.count(); ++i)
+	{
+		const QKeySequence shortcut(rawShortcuts.at(i).toString());
+
+		if (shortcut.isEmpty() || (!areSingleKeyShortcutsAllowed && !ActionsManager::isShortcutAllowed(shortcut, ActionsManager::DisallowSingleKeyShortcutCheck, false)))
+		{
+			continue;
+		}
+
+		shortcuts.append(shortcut);
+	}
+
+	return shortcuts;
 }
 
 bool KeyboardProfile::isModified() const
@@ -232,6 +283,11 @@ bool KeyboardProfile::save()
 	stream << QLatin1String("Author: ") << m_author << QLatin1Char('\n');
 	stream << QLatin1String("Version: ") << m_version;
 
+	if (m_homePage.isValid())
+	{
+		stream << QLatin1Char('\n') << QLatin1String("HomePage: ") << m_homePage.toString();
+	}
+
 	settings.setComment(comment);
 
 	QJsonArray contextsArray;
@@ -244,14 +300,12 @@ bool KeyboardProfile::save()
 		for (int i = 0; i < contextsIterator.value().count(); ++i)
 		{
 			const KeyboardProfile::Action &action(contextsIterator.value().at(i));
-			QJsonArray shortcutsArray;
+			QJsonObject actionObject{{QLatin1String("action"), ActionsManager::getActionName(action.action)}, {QLatin1String("shortcuts"), createShortcutsArray(action.shortcuts)}};
 
-			for (int j = 0; j < action.shortcuts.count(); ++j)
+			if (!action.disabledShortcuts.isEmpty())
 			{
-				shortcutsArray.append(action.shortcuts.at(j).toString());
+				actionObject.insert(QLatin1String("disabledShortcuts"), createShortcutsArray(action.disabledShortcuts));
 			}
-
-			QJsonObject actionObject{{QLatin1String("action"), ActionsManager::getActionName(action.action)}, {QLatin1String("shortcuts"), shortcutsArray}};
 
 			if (!action.parameters.isEmpty())
 			{
@@ -335,6 +389,7 @@ ActionsManager::ActionsManager(QObject *parent) : QObject(parent),
 	registerAction(OpenLinkInNewPrivateWindowBackgroundAction, QT_TRANSLATE_NOOP("actions", "Open in New Private Background Window"), {}, {}, ActionDefinition::WindowScope, (ActionDefinition::IsEnabledFlag | ActionDefinition::IsDeprecatedFlag), ActionDefinition::LinkCategory);
 	registerAction(CopyLinkToClipboardAction, QT_TRANSLATE_NOOP("actions", "Copy Link to Clipboard"), {}, {}, ActionDefinition::WindowScope, ActionDefinition::IsEnabledFlag, ActionDefinition::LinkCategory);
 	registerAction(BookmarkLinkAction, QT_TRANSLATE_NOOP("actions", "Bookmark Link…"), {}, ThemesManager::createIcon(QLatin1String("bookmark-new")), ActionDefinition::WindowScope, ActionDefinition::IsEnabledFlag, ActionDefinition::LinkCategory);
+	registerAction(ShowLinkAsQrCodeAction, QT_TRANSLATE_NOOP("actions", "Show Link as QR Code…"), {}, {}, ActionDefinition::WindowScope, ActionDefinition::IsEnabledFlag, ActionDefinition::LinkCategory);
 	registerAction(SaveLinkToDiskAction, QT_TRANSLATE_NOOP("actions", "Save Link Target As…"), {}, {}, ActionDefinition::WindowScope, ActionDefinition::IsEnabledFlag, ActionDefinition::LinkCategory);
 	registerAction(SaveLinkToDownloadsAction, QT_TRANSLATE_NOOP("actions", "Save to Downloads"), {}, {}, ActionDefinition::WindowScope, ActionDefinition::IsEnabledFlag, ActionDefinition::LinkCategory);
 	registerAction(OpenSelectionAsLinkAction, QT_TRANSLATE_NOOP("actions", "Go to This Address"), {}, {}, ActionDefinition::WindowScope);
@@ -670,7 +725,7 @@ QString ActionsManager::createReport()
 
 QString ActionsManager::getActionName(int identifier)
 {
-	return EnumeratorMapper(staticMetaObject.enumerator(m_actionIdentifierEnumerator), QLatin1String("Action")).mapToName(identifier);
+	return EnumeratorMapper(staticMetaObject.enumerator(m_actionIdentifierEnumerator), QLatin1String("Action")).mapToName(identifier, false);
 }
 
 QKeySequence ActionsManager::getActionShortcut(int identifier, const QVariantMap &parameters)

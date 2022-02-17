@@ -44,6 +44,7 @@ public:
 	{
 		QVariantMap parameters;
 		QVector<QKeySequence> shortcuts;
+		QVector<QKeySequence> disabledShortcuts;
 		int action = -1;
 
 		bool operator ==(const Action &other) const;
@@ -56,16 +57,23 @@ public:
 	void setAuthor(const QString &author);
 	void setVersion(const QString &version);
 	void setDefinitions(const QHash<int, QVector<Action> > &definitions);
+	void setMetaData(const MetaData &metaData);
 	void setModified(bool isModified);
 	QString getName() const override;
 	QString getTitle() const override;
 	QString getDescription() const override;
 	QString getAuthor() const;
 	QString getVersion() const override;
+	QUrl getHomePage() const override;
+	MetaData getMetaData() const;
 	QHash<int, QVector<Action> > getDefinitions() const;
 	bool isModified() const;
 	bool isValid() const;
 	bool save();
+
+protected:
+	QJsonArray createShortcutsArray(const QVector<QKeySequence> &shortcuts) const;
+	QVector<QKeySequence> loadShortcuts(const QJsonArray &rawShortcuts, bool areSingleKeyShortcutsAllowed) const;
 
 private:
 	QString m_identifier;
@@ -73,6 +81,7 @@ private:
 	QString m_description;
 	QString m_author;
 	QString m_version;
+	QUrl m_homePage;
 	QHash<int, QVector<Action> > m_definitions;
 	bool m_isModified;
 };
@@ -151,6 +160,7 @@ public:
 		OpenLinkInNewPrivateWindowBackgroundAction,
 		CopyLinkToClipboardAction,
 		BookmarkLinkAction,
+		ShowLinkAsQrCodeAction,
 		SaveLinkToDiskAction,
 		SaveLinkToDownloadsAction,
 		OpenSelectionAsLinkAction,

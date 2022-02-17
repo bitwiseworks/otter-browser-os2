@@ -1,7 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2014 Martin Rejda <rejdi@otter.ksp.sk>
-* Copyright (C) 2014 - 2020 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 *
 * This program is free software: you can redistribute it and/or modify
 * it under the terms of the GNU General Public License as published by
@@ -18,32 +17,37 @@
 *
 **************************************************************************/
 
-#ifndef OTTER_QTWEBKITPLUGINWIDGET_H
-#define OTTER_QTWEBKITPLUGINWIDGET_H
+#ifndef OTTER_METADATADIALOG_H
+#define OTTER_METADATADIALOG_H
 
-#include <QtCore/QUrl>
-#include <QtWidgets/QWidget>
+#include "Dialog.h"
+#include "../core/AddonsManager.h"
 
 namespace Otter
 {
 
-class QtWebKitPluginWidget final : public QWidget
+namespace Ui
+{
+	class MetaDataDialog;
+}
+
+class MetaDataDialog final : public Dialog
 {
 	Q_OBJECT
 
 public:
-	explicit QtWebKitPluginWidget(const QString &mimeType, const QUrl &url, QWidget *parent = nullptr);
+	explicit MetaDataDialog(const Addon::MetaData &metaData, QWidget *parent = nullptr);
+	~MetaDataDialog();
+
+	Addon::MetaData getMetaData() const;
+	bool isModified() const;
 
 protected:
 	void changeEvent(QEvent *event) override;
-	void paintEvent(QPaintEvent *event) override;
-	void enterEvent(QEvent *event) override;
-	void leaveEvent(QEvent *event) override;
 
 private:
-	QString m_mimeType;
-	QString m_url;
-	bool m_isHovered;
+	bool m_isModified;
+	Ui::MetaDataDialog *m_ui;
 };
 
 }

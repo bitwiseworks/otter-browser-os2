@@ -64,11 +64,20 @@ class QtWebKitPage final : public QWebPage
 	Q_OBJECT
 
 public:
+	enum HistoryEntryData
+	{
+		IdentifierEntryData = 0,
+		ZoomEntryData,
+		PositionEntryData,
+		VisitTimeEntryData
+	};
+
 	explicit QtWebKitPage(QtWebKitNetworkManager *networkManager, QtWebKitWebWidget *parent);
 	~QtWebKitPage();
 
 	void triggerAction(WebAction action, bool isChecked = false) override;
 	QtWebKitFrame* getMainFrame() const;
+	QtWebKitNetworkManager* getNetworkManager() const;
 	QVariant runScript(const QString &path, QWebElement element = {});
 	bool event(QEvent *event) override;
 	bool extension(Extension extension, const ExtensionOption *option = nullptr, ExtensionReturn *output = nullptr) override;
@@ -79,6 +88,8 @@ public:
 	bool isViewingMedia() const;
 
 public slots:
+	void saveState(QWebFrame *frame, QWebHistoryItem *item);
+	void restoreState(QWebFrame *frame);
 	void markAsDisplayingErrorPage();
 	void updateStyleSheets(const QUrl &url = {});
 

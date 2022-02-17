@@ -1067,7 +1067,7 @@ void MainWindow::triggerAction(int identifier, const QVariantMap &parameters, Ac
 			return;
 		case ActionsManager::OpenPanelAction:
 			{
-				ToolBarsManager::ToolBarDefinition definition(ToolBarsManager::getToolBarDefinition(parameters.value(QLatin1String("sidebar"), ToolBarsManager::SideBar).toInt()));
+				const ToolBarsManager::ToolBarDefinition definition(ToolBarsManager::getToolBarDefinition(parameters.value(QLatin1String("sidebar"), ToolBarsManager::SideBar).toInt()));
 
 				if (definition.isValid() && !definition.currentPanel.isEmpty())
 				{
@@ -1860,7 +1860,7 @@ void MainWindow::handleTransferStarted()
 	{
 		const QUrl url(QLatin1String("about:transfers"));
 
-		if (!SessionsManager::hasUrl(url, false))
+		if (!SessionsManager::hasUrl(url))
 		{
 			triggerAction(ActionsManager::OpenUrlAction, {{QLatin1String("url"), url}, {QLatin1String("hints"), QVariant(SessionsManager::NewTabOpen | SessionsManager::BackgroundOpen)}});
 		}

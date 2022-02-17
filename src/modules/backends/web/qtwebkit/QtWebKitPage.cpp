@@ -133,7 +133,7 @@ void QtWebKitFrame::handleLoadFinished()
 
 	const QStringList blockedRequests(m_widget->getBlockedElements());
 
-	if (blockedRequests.count() > 0)
+	if (!blockedRequests.isEmpty())
 	{
 		const QWebElementCollection elements(m_frame->documentElement().findAll(QLatin1String("[src]")));
 
@@ -144,7 +144,9 @@ void QtWebKitFrame::handleLoadFinished()
 
 			for (int j = 0; j < blockedRequests.count(); ++j)
 			{
-				if (url.matches(QUrl(blockedRequests.at(j)), QUrl::None) || blockedRequests.at(j).endsWith(url.url()))
+				const QString blockedRequest(blockedRequests.at(j));
+
+				if (url.matches(QUrl(blockedRequest), QUrl::None) || blockedRequest.endsWith(url.url()))
 				{
 					element.setStyleProperty(QLatin1String("display"), QLatin1String("none !important"));
 
@@ -176,6 +178,10 @@ QtWebKitPage::QtWebKitPage(QtWebKitNetworkManager *networkManager, QtWebKitWebWi
 	connect(SettingsManager::getInstance(), &SettingsManager::optionChanged, this, &QtWebKitPage::handleOptionChanged);
 	connect(this, &QtWebKitPage::frameCreated, this, &QtWebKitPage::handleFrameCreation);
 	connect(this, &QtWebKitPage::consoleMessageReceived, this, &QtWebKitPage::handleConsoleMessage);
+	connect(this, &QtWebKitPage::saveFrameStateRequested, this, &QtWebKitPage::saveState);
+	connect(this, &QtWebKitPage::restoreFrameStateRequested, this, &QtWebKitPage::restoreState);
+	connect(m_networkManager, &QtWebKitNetworkManager::pageInformationChanged, parent, &QtWebKitWebWidget::pageInformationChanged);
+	connect(m_networkManager, &QtWebKitNetworkManager::requestBlocked, parent, &QtWebKitWebWidget::requestBlocked);
 	connect(mainFrame(), &QWebFrame::loadStarted, this, [&]()
 	{
 		updateStyleSheets();
@@ -259,8 +265,54 @@ void QtWebKitPage::validatePopup(const QUrl &url)
 	}
 	else
 	{
-		QtWebKitWebWidget *widget(createWidget((popupsPolicy == QLatin1String("openAllInBackground")) ? (SessionsManager::NewTabOpen | SessionsManager::BackgroundOpen) : SessionsManager::NewTabOpen));
+		SessionsManager::OpenHints hints(SessionsManager::NewTabOpen);
+
+		if (popupsPolicy == QLatin1String("openAllInBackground"))
+		{
+			hints |= SessionsManager::BackgroundOpen;
+		}
+
+		QtWebKitWebWidget *widget(createWidget(hints));
 		widget->setUrl(url);
+	}
+}
+
+void QtWebKitPage::saveState(QWebFrame *frame, QWebHistoryItem *item)
+{
+	if (!m_widget || frame != mainFrame())
+	{
+		return;
+	}
+
+	QVariantList state(history()->currentItem().userData().toList());
+
+	if (state.count() < 4)
+	{
+		state = {0, m_widget->getZoom(), mainFrame()->scrollPosition(), QDateTime::currentDateTimeUtc()};
+	}
+	else
+	{
+		state[ZoomEntryData] = m_widget->getZoom();
+		state[PositionEntryData] = mainFrame()->scrollPosition();
+	}
+
+	item->setUserData(state);
+}
+
+void QtWebKitPage::restoreState(QWebFrame *frame)
+{
+	if (!m_widget || frame != mainFrame())
+	{
+		return;
+	}
+
+	const QVariantList state(history()->currentItem().userData().toList());
+
+	m_widget->setZoom(state.value(ZoomEntryData, m_widget->getZoom()).toInt());
+
+	if (mainFrame()->scrollPosition().isNull())
+	{
+		mainFrame()->setScrollPosition(state.value(PositionEntryData).toPoint());
 	}
 }
 
@@ -276,7 +328,7 @@ void QtWebKitPage::markAsPopup()
 
 void QtWebKitPage::handleOptionChanged(int identifier)
 {
-	if (SettingsManager::getOptionName(identifier).startsWith(QLatin1String("Content/")) || identifier == SettingsManager::Interface_ShowScrollBarsOption)
+	if (identifier == SettingsManager::Interface_ShowScrollBarsOption || SettingsManager::getOptionName(identifier).startsWith(QLatin1String("Content/")))
 	{
 		updateStyleSheets();
 	}
@@ -296,7 +348,7 @@ void QtWebKitPage::handleFrameCreation(QWebFrame *frame)
 
 void QtWebKitPage::handleConsoleMessage(MessageSource category, MessageLevel level, const QString &message, int line, const QString &source)
 {
-	Console::MessageLevel mappedLevel(Console::UnknownLevel);
+	Console::MessageLevel mappedLevel(Console::DebugLevel);
 
 	switch (level)
 	{
@@ -313,8 +365,6 @@ void QtWebKitPage::handleConsoleMessage(MessageSource category, MessageLevel lev
 
 			break;
 		default:
-			mappedLevel = Console::DebugLevel;
-
 			break;
 	}
 
@@ -343,8 +393,6 @@ void QtWebKitPage::handleConsoleMessage(MessageSource category, MessageLevel lev
 
 			break;
 		default:
-			mappedCategory = Console::OtherCategory;
-
 			break;
 	}
 
@@ -449,37 +497,42 @@ void QtWebKitPage::triggerAction(WebAction action, bool isChecked)
 
 QWebPage* QtWebKitPage::createWindow(WebWindowType type)
 {
-	if (type != WebModalDialog)
+	if (type == WebModalDialog)
 	{
-		const QString popupsPolicy(getOption(SettingsManager::Permissions_ScriptsCanOpenWindowsOption).toString());
-
-		if (!m_widget || currentFrame()->hitTestContent(m_widget->getClickPosition()).linkUrl().isEmpty())
-		{
-			if (popupsPolicy == QLatin1String("blockAll"))
-			{
-				return nullptr;
-			}
-
-			if (popupsPolicy == QLatin1String("ask") || !getOption(SettingsManager::ContentBlocking_ProfilesOption).isNull())
-			{
-				QtWebKitPage *page(new QtWebKitPage());
-				page->markAsPopup();
-
-				connect(page, &QtWebKitPage::aboutToNavigate, this, &QtWebKitPage::validatePopup);
-
-				return page;
-			}
-		}
-
-		return createWidget(SessionsManager::calculateOpenHints((popupsPolicy == QLatin1String("openAllInBackground")) ? (SessionsManager::NewTabOpen | SessionsManager::BackgroundOpen) : SessionsManager::NewTabOpen))->getPage();
+		return QWebPage::createWindow(type);
 	}
 
-	return QWebPage::createWindow(type);
+	const QString popupsPolicy(getOption(SettingsManager::Permissions_ScriptsCanOpenWindowsOption).toString());
+
+	if (!m_widget || currentFrame()->hitTestContent(m_widget->getClickPosition()).linkUrl().isEmpty())
+	{
+		if (popupsPolicy == QLatin1String("blockAll"))
+		{
+			return nullptr;
+		}
+
+		if (popupsPolicy == QLatin1String("ask") || !getOption(SettingsManager::ContentBlocking_ProfilesOption).isNull())
+		{
+			QtWebKitPage *page(new QtWebKitPage());
+			page->markAsPopup();
+
+			connect(page, &QtWebKitPage::aboutToNavigate, this, &QtWebKitPage::validatePopup);
+
+			return page;
+		}
+	}
+
+	return createWidget(SessionsManager::calculateOpenHints((popupsPolicy == QLatin1String("openAllInBackground")) ? (SessionsManager::NewTabOpen | SessionsManager::BackgroundOpen) : SessionsManager::NewTabOpen))->getPage();
 }
 
 QtWebKitFrame* QtWebKitPage::getMainFrame() const
 {
 	return m_mainFrame;
+}
+
+QtWebKitNetworkManager* QtWebKitPage::getNetworkManager() const
+{
+	return m_networkManager;
 }
 
 QtWebKitWebWidget* QtWebKitPage::createWidget(SessionsManager::OpenHints hints)
@@ -938,18 +991,18 @@ bool QtWebKitPage::extension(Extension extension, const ExtensionOption *option,
 
 bool QtWebKitPage::shouldInterruptJavaScript()
 {
-	if (m_widget)
+	if (!m_widget)
 	{
-		ContentsDialog dialog(ThemesManager::createIcon(QLatin1String("dialog-warning")), tr("Question"), tr("The script on this page appears to have a problem."), tr("Do you want to stop the script?"), (QDialogButtonBox::Yes | QDialogButtonBox::No), nullptr, m_widget);
-
-		connect(m_widget, &QtWebKitWebWidget::aboutToReload, &dialog, &ContentsDialog::close);
-
-		m_widget->showDialog(&dialog);
-
-		return dialog.isAccepted();
+		return QWebPage::shouldInterruptJavaScript();
 	}
 
-	return QWebPage::shouldInterruptJavaScript();
+	ContentsDialog dialog(ThemesManager::createIcon(QLatin1String("dialog-warning")), tr("Question"), tr("The script on this page appears to have a problem."), tr("Do you want to stop the script?"), (QDialogButtonBox::Yes | QDialogButtonBox::No), nullptr, m_widget);
+
+	connect(m_widget, &QtWebKitWebWidget::aboutToReload, &dialog, &ContentsDialog::close);
+
+	m_widget->showDialog(&dialog);
+
+	return dialog.isAccepted();
 }
 
 bool QtWebKitPage::supportsExtension(Extension extension) const
@@ -959,7 +1012,7 @@ bool QtWebKitPage::supportsExtension(Extension extension) const
 
 bool QtWebKitPage::isDisplayingErrorPage() const
 {
-	return m_mainFrame->isDisplayingErrorPage();
+	return (m_mainFrame && m_mainFrame->isDisplayingErrorPage());
 }
 
 bool QtWebKitPage::isPopup() const

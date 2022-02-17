@@ -87,6 +87,7 @@ public:
 	QMultiMap<QString, QString> getMetaData() const override;
 	ContentStates getContentState() const override;
 	LoadingState getLoadingState() const override;
+	quint64 getGlobalHistoryEntryIdentifier(int index) const override;
 	int getZoom() const override;
 	bool hasSelection() const override;
 	bool hasWatchedChanges(ChangeWatcher watcher) const override;
@@ -110,14 +111,6 @@ public slots:
 	void setUrl(const QUrl &url, bool isTypedIn = true) override;
 
 protected:
-	enum HistoryEntryData
-	{
-		IdentifierEntryData = 0,
-		ZoomEntryData,
-		PositionEntryData,
-		VisitTimeEntryData
-	};
-
 	explicit QtWebKitWebWidget(const QVariantMap &parameters, WebBackend *backend, QtWebKitNetworkManager *networkManager = nullptr, ContentsWidget *parent = nullptr);
 
 	void timerEvent(QTimerEvent *event) override;
@@ -156,8 +149,6 @@ protected:
 	bool isScrollBar(const QPoint &position) const override;
 
 protected slots:
-	void saveState(QWebFrame *frame, QWebHistoryItem *item);
-	void restoreState(QWebFrame *frame);
 	void handleDownloadRequested(const QNetworkRequest &request);
 	void handleUnsupportedContent(QNetworkReply *reply);
 	void handleOptionChanged(int identifier, const QVariant &value);

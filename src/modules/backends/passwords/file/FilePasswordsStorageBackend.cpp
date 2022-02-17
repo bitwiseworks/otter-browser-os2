@@ -1,6 +1,6 @@
 /**************************************************************************
 * Otter Browser: Web browser controlled by the user, not vice-versa.
-* Copyright (C) 2016 - 2021 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
+* Copyright (C) 2016 - 2022 Michal Dutkiewicz aka Emdek <michal@emdek.pl>
 * Copyright (C) 2017 Jan Bajer aka bajasoft <jbajer@gmail.com>
 *
 * This program is free software: you can redistribute it and/or modify
@@ -35,8 +35,13 @@ FilePasswordsStorageBackend::FilePasswordsStorageBackend(QObject *parent) : Pass
 {
 }
 
-void FilePasswordsStorageBackend::initialize()
+void FilePasswordsStorageBackend::ensureInitialized()
 {
+	if (m_isInitialized)
+	{
+		return;
+	}
+
 	m_isInitialized = true;
 
 	const QString path(SessionsManager::getWritableDataPath(QLatin1String("passwords.json")));
@@ -56,7 +61,7 @@ void FilePasswordsStorageBackend::initialize()
 	}
 
 	QHash<QString, QVector<PasswordsManager::PasswordInformation> > passwords;
-	QJsonObject hostsObject(QJsonDocument::fromJson(file.readAll()).object());
+	const QJsonObject hostsObject(QJsonDocument::fromJson(file.readAll()).object());
 	QJsonObject::const_iterator hostsIterator;
 
 	for (hostsIterator = hostsObject.constBegin(); hostsIterator != hostsObject.constEnd(); ++hostsIterator)
@@ -68,6 +73,7 @@ void FilePasswordsStorageBackend::initialize()
 		for (int i = 0; i < passwordsArray.count(); ++i)
 		{
 			const QJsonObject passwordObject(passwordsArray.at(i).toObject());
+			const QJsonArray fieldsArray(passwordObject.value(QLatin1String("fields")).toArray());
 			PasswordsManager::PasswordInformation password;
 			password.url = QUrl(passwordObject.value(QLatin1String("url")).toString());
 			password.timeAdded = QDateTime::fromString(passwordObject.value(QLatin1String("timeAdded")).toString(), Qt::ISODate);
@@ -75,9 +81,6 @@ void FilePasswordsStorageBackend::initialize()
 			password.timeUsed = QDateTime::fromString(passwordObject.value(QLatin1String("timeUsed")).toString(), Qt::ISODate);
 			password.timeUsed.setTimeSpec(Qt::UTC);
 			password.type = ((passwordObject.value(QLatin1String("type")).toString() == QLatin1String("auth")) ? PasswordsManager::AuthPassword : PasswordsManager::FormPassword);
-
-			const QJsonArray fieldsArray(passwordObject.value(QLatin1String("fields")).toArray());
-
 			password.fields.reserve(fieldsArray.count());
 
 			for (int j = 0; j < fieldsArray.count(); ++j)
@@ -165,10 +168,7 @@ void FilePasswordsStorageBackend::clearPasswords(const QString &host)
 		return;
 	}
 
-	if (!m_isInitialized)
-	{
-		initialize();
-	}
+	ensureInitialized();
 
 	if (m_passwords.isEmpty())
 	{
@@ -203,10 +203,7 @@ void FilePasswordsStorageBackend::clearPasswords(int period)
 		}
 	}
 
-	if (!m_isInitialized)
-	{
-		initialize();
-	}
+	ensureInitialized();
 
 	if (m_passwords.isEmpty())
 	{
@@ -252,10 +249,7 @@ void FilePasswordsStorageBackend::clearPasswords(int period)
 
 void FilePasswordsStorageBackend::addPassword(const PasswordsManager::PasswordInformation &password)
 {
-	if (!m_isInitialized)
-	{
-		initialize();
-	}
+	ensureInitialized();
 
 	const QString host(Utils::extractHost(password.url));
 
@@ -296,10 +290,7 @@ void FilePasswordsStorageBackend::addPassword(const PasswordsManager::PasswordIn
 
 void FilePasswordsStorageBackend::removePassword(const PasswordsManager::PasswordInformation &password)
 {
-	if (!m_isInitialized)
-	{
-		initialize();
-	}
+	ensureInitialized();
 
 	const QString host(Utils::extractHost(password.url));
 
@@ -352,20 +343,14 @@ QUrl FilePasswordsStorageBackend::getHomePage() const
 
 QStringList FilePasswordsStorageBackend::getHosts()
 {
-	if (!m_isInitialized)
-	{
-		initialize();
-	}
+	ensureInitialized();
 
 	return m_passwords.keys();
 }
 
 QVector<PasswordsManager::PasswordInformation> FilePasswordsStorageBackend::getPasswords(const QUrl &url, PasswordsManager::PasswordTypes types)
 {
-	if (!m_isInitialized)
-	{
-		initialize();
-	}
+	ensureInitialized();
 
 	const QString host(Utils::extractHost(url));
 
@@ -395,10 +380,7 @@ QVector<PasswordsManager::PasswordInformation> FilePasswordsStorageBackend::getP
 
 PasswordsManager::PasswordMatch FilePasswordsStorageBackend::hasPassword(const PasswordsManager::PasswordInformation &password)
 {
-	if (!m_isInitialized)
-	{
-		initialize();
-	}
+	ensureInitialized();
 
 	const QString host(Utils::extractHost(password.url));
 
@@ -424,19 +406,17 @@ PasswordsManager::PasswordMatch FilePasswordsStorageBackend::hasPassword(const P
 
 bool FilePasswordsStorageBackend::hasPasswords(const QUrl &url, PasswordsManager::PasswordTypes types)
 {
-	if (!m_isInitialized)
-	{
-		initialize();
-	}
+	ensureInitialized();
 
 	const QString host(Utils::extractHost(url));
+	const bool hasAnyPasswords(m_passwords.contains(host));
 
 	if (types == PasswordsManager::AnyPassword)
 	{
-		return m_passwords.contains(host);
+		return hasAnyPasswords;
 	}
 
-	if (m_passwords.contains(host))
+	if (hasAnyPasswords)
 	{
 		const QVector<PasswordsManager::PasswordInformation> passwords(m_passwords[host]);
 

@@ -60,30 +60,6 @@ void Action::initialize()
 {
 	const ActionsManager::ActionDefinition definition(getDefinition());
 
-	switch (m_identifier)
-	{
-		case ActionsManager::PreferencesAction:
-			setMenuRole(QAction::PreferencesRole);
-
-			break;
-		case ActionsManager::AboutQtAction:
-			setMenuRole(QAction::AboutQtRole);
-
-			break;
-		case ActionsManager::ExitAction:
-			setMenuRole(QAction::QuitRole);
-
-			break;
-		case ActionsManager::AboutApplicationAction:
-			setMenuRole(QAction::AboutRole);
-
-			break;
-		default:
-			break;
-	}
-
-	setShortcutContext(Qt::WidgetShortcut);
-
 	if (definition.isValid())
 	{
 		if (definition.flags.testFlag(ActionsManager::ActionDefinition::IsCheckableFlag))
@@ -97,12 +73,12 @@ void Action::initialize()
 		}
 
 		connect(this, &Action::triggered, this, &Action::triggerAction);
+		connect(ActionsManager::getInstance(), &ActionsManager::shortcutsChanged, this, &Action::updateShortcut);
 	}
 
+	setShortcutContext(Qt::WidgetShortcut);
 	updateIcon();
 	updateState();
-
-	connect(ActionsManager::getInstance(), &ActionsManager::shortcutsChanged, this, &Action::updateShortcut);
 }
 
 void Action::triggerAction(bool isChecked)
@@ -297,7 +273,13 @@ void Action::setState(const ActionsManager::ActionDefinition::State &state)
 	if (!m_flags.testFlag(HasCustomIconFlag))
 	{
 		setIcon(state.icon);
+		updateIcon();
 	}
+}
+
+QString Action::getTextOverride() const
+{
+	return m_textOverride;
 }
 
 ActionsManager::ActionDefinition Action::getDefinition() const
@@ -313,6 +295,16 @@ QVariantMap Action::getParameters() const
 int Action::getIdentifier() const
 {
 	return m_identifier;
+}
+
+bool Action::hasTextOverride() const
+{
+	return m_flags.testFlag(HasCustomTextFlag);
+}
+
+bool Action::isTextOverrideTranslateable() const
+{
+	return m_isTextOverrideTranslateable;
 }
 
 bool Action::event(QEvent *event)
