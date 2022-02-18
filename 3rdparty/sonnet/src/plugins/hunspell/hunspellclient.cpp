@@ -56,6 +56,8 @@ HunspellClient::HunspellClient(QObject *parent)
 
 #ifdef Q_OS_MAC
     directories << QLatin1String("/System/Library/Spelling/");
+#elif defined(Q_OS_OS2)
+    directories << QLatin1String("/@unixroot/usr/share/hunspell") << QLatin1String("/@unixroot/usr/local/share/hunspell") << QLatin1String("/@unixroot/usr/share/myspell") << QLatin1String("/@unixroot/usr/local/share/myspell");
 #else
     directories << QLatin1String("/usr/share/hunspell/") << QLatin1String("/usr/local/share/hunspell/") << QLatin1String("/usr/share/myspell/") << QLatin1String("/usr/share/myspell/dicts/") << QLatin1String("/usr/local/share/mozilla-dicts/");
 #endif
